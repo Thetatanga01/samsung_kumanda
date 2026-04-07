@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class RemoteButton extends StatefulWidget {
   final Widget child;
@@ -55,7 +56,12 @@ class _RemoteButtonState extends State<RemoteButton>
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: widget.onTap,
+      onTap: widget.onTap == null
+          ? null
+          : () {
+              HapticFeedback.lightImpact();
+              widget.onTap!();
+            },
       onTapDown: _onTapDown,
       onTapUp: _onTapUp,
       onTapCancel: _onTapCancel,
