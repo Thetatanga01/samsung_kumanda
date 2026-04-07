@@ -69,9 +69,9 @@ class TVProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void connectManual(String ip) {
+  Future<void> connectManual(String ip) async {
     final device = TVDiscoveryService.manualDevice(ip);
-    connectTo(device);
+    await connectTo(device);
   }
 
   @override

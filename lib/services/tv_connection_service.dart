@@ -22,29 +22,39 @@ class TVConnectionService {
   TVConnectionService({this.onStatusChange, this.onTokenReceived});
 
   Future<void> connect(TVDevice tv) async {
-    disconnect(); // önce mevcut bağlantıyı kapat
+    disconnect();
     _updateStatus(ConnectionStatus.connecting);
-    try {
-      _channel = IOWebSocketChannel.connect(
-        Uri.parse(tv.wsUrl),
-        connectTimeout: const Duration(seconds: 5),
-      );
 
-      // ready future bağlantı kurulana kadar bekler, hata olursa exception fırlatır
-      await _channel!.ready;
+    // port 8001 dene, başarısız olursa 8002 (SSL) dene
+    final urls = [
+      tv.wsUrl,
+      tv.wsUrl.replaceFirst('ws://', 'wss://').replaceFirst(':8001/', ':8002/'),
+    ];
 
-      // Önce listener kur
-      _subscription = _channel!.stream.listen(
-        _onMessage,
-        onError: (_) => _updateStatus(ConnectionStatus.disconnected),
-        onDone: () => _updateStatus(ConnectionStatus.disconnected),
-      );
+    for (final url in urls) {
+      try {
+        _channel = IOWebSocketChannel.connect(
+          Uri.parse(url),
+          connectTimeout: const Duration(seconds: 5),
+        );
 
-      // Sonra auth gönder
-      _channel!.sink.add(jsonEncode(buildConnectMessage('Samsung Kumanda')));
-    } catch (_) {
-      _updateStatus(ConnectionStatus.disconnected);
+        await _channel!.ready;
+
+        _subscription = _channel!.stream.listen(
+          _onMessage,
+          onError: (_) => _updateStatus(ConnectionStatus.disconnected),
+          onDone: () => _updateStatus(ConnectionStatus.disconnected),
+        );
+
+        _channel!.sink.add(jsonEncode(buildConnectMessage('Samsung Kumanda')));
+        return;
+      } catch (_) {
+        _channel?.sink.close();
+        _channel = null;
+      }
     }
+
+    _updateStatus(ConnectionStatus.disconnected);
   }
 
   void _onMessage(dynamic data) {
