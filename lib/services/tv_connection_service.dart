@@ -1,14 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:web_socket_channel/io.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+
 import '../models/tv_device.dart';
 
 enum ConnectionStatus { disconnected, connecting, connected }
 
 class TVConnectionService {
-  WebSocketChannel? _channel;
+  WebSocket? _socket;
   StreamSubscription? _subscription;
   ConnectionStatus _status = ConnectionStatus.disconnected;
   String? _token;
@@ -25,32 +24,38 @@ class TVConnectionService {
     disconnect();
     _updateStatus(ConnectionStatus.connecting);
 
-    // port 8001 dene, başarısız olursa 8002 (SSL) dene
-    final urls = [
-      tv.wsUrl,
-      tv.wsUrl.replaceFirst('ws://', 'wss://').replaceFirst(':8001/', ':8002/'),
+    // port 8001 dene, başarısız olursa 8002 (SSL, self-signed cert kabul et)
+    final attempts = [
+      () => WebSocket.connect(
+            'ws://${tv.ip}:8001/api/v2/channels/samsung.remote.control',
+          ).timeout(const Duration(seconds: 5)),
+      () async {
+        final ctx = SecurityContext(withTrustedRoots: false);
+        final client = HttpClient(context: ctx)
+          ..badCertificateCallback = (cert, host, port) => true;
+        return WebSocket.connect(
+          'wss://${tv.ip}:8002/api/v2/channels/samsung.remote.control',
+          customClient: client,
+        ).timeout(const Duration(seconds: 5));
+      },
     ];
 
-    for (final url in urls) {
+    for (final attempt in attempts) {
       try {
-        _channel = IOWebSocketChannel.connect(
-          Uri.parse(url),
-          connectTimeout: const Duration(seconds: 5),
-        );
+        _socket = await attempt();
 
-        await _channel!.ready;
-
-        _subscription = _channel!.stream.listen(
+        _subscription = _socket!.listen(
           _onMessage,
           onError: (_) => _updateStatus(ConnectionStatus.disconnected),
           onDone: () => _updateStatus(ConnectionStatus.disconnected),
+          cancelOnError: true,
         );
 
-        _channel!.sink.add(jsonEncode(buildConnectMessage('Samsung Kumanda')));
+        _socket!.add(jsonEncode(buildConnectMessage('Samsung Kumanda')));
         return;
       } catch (_) {
-        _channel?.sink.close();
-        _channel = null;
+        _socket?.close();
+        _socket = null;
       }
     }
 
@@ -62,14 +67,13 @@ class TVConnectionService {
       final json = jsonDecode(data as String) as Map<String, dynamic>;
       final event = json['event'] as String?;
 
-      if (event == 'ms.channel.connect') {
+      if (event == 'ms.channel.connect' ||
+          event == 'ms.channel.clientConnect') {
         final newToken = json['data']?['token'] as String?;
         if (newToken != null && newToken.isNotEmpty) {
           _token = newToken;
           onTokenReceived?.call(newToken);
         }
-        _updateStatus(ConnectionStatus.connected);
-      } else if (event == 'ms.channel.clientConnect') {
         _updateStatus(ConnectionStatus.connected);
       }
     } catch (_) {}
@@ -77,12 +81,14 @@ class TVConnectionService {
 
   void sendKey(String keyCode) {
     if (_status != ConnectionStatus.connected) return;
-    _channel?.sink.add(jsonEncode(buildKeyMessage(keyCode)));
+    _socket?.add(jsonEncode(buildKeyMessage(keyCode)));
   }
 
   void disconnect() {
     _subscription?.cancel();
-    _channel?.sink.close(WebSocketStatus.normalClosure);
+    _subscription = null;
+    _socket?.close();
+    _socket = null;
     _updateStatus(ConnectionStatus.disconnected);
   }
 
