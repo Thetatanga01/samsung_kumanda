@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/tv_provider.dart';
+import 'screens/remote_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,7 +24,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF0D1B2A),
       ),
-      home: const Scaffold(body: Center(child: Text('Remote coming...'))),
+      home: const RemoteScreen(),
     );
   }
 }
