@@ -33,13 +33,15 @@ class TVConnectionService {
       // ready future bağlantı kurulana kadar bekler, hata olursa exception fırlatır
       await _channel!.ready;
 
-      _channel!.sink.add(jsonEncode(buildConnectMessage('Samsung Kumanda')));
-
+      // Önce listener kur
       _subscription = _channel!.stream.listen(
         _onMessage,
         onError: (_) => _updateStatus(ConnectionStatus.disconnected),
         onDone: () => _updateStatus(ConnectionStatus.disconnected),
       );
+
+      // Sonra auth gönder
+      _channel!.sink.add(jsonEncode(buildConnectMessage('Samsung Kumanda')));
     } catch (_) {
       _updateStatus(ConnectionStatus.disconnected);
     }
@@ -52,10 +54,12 @@ class TVConnectionService {
 
       if (event == 'ms.channel.connect') {
         final newToken = json['data']?['token'] as String?;
-        if (newToken != null) {
+        if (newToken != null && newToken.isNotEmpty) {
           _token = newToken;
           onTokenReceived?.call(newToken);
         }
+        _updateStatus(ConnectionStatus.connected);
+      } else if (event == 'ms.channel.clientConnect') {
         _updateStatus(ConnectionStatus.connected);
       }
     } catch (_) {}
