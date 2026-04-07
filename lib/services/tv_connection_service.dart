@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 import '../models/tv_device.dart';
 
@@ -40,29 +41,46 @@ class TVConnectionService {
       },
     ];
 
-    for (final attempt in attempts) {
+    final urlList = [
+      'ws://${tv.ip}:8001/api/v2/channels/samsung.remote.control',
+      'wss://${tv.ip}:8002/api/v2/channels/samsung.remote.control',
+    ];
+
+    for (int i = 0; i < attempts.length; i++) {
+      debugPrint('[TV] Deneniyor: ${urlList[i]}');
       try {
-        _socket = await attempt();
+        _socket = await attempts[i]();
+        debugPrint('[TV] WebSocket bağlandı: ${urlList[i]}');
 
         _subscription = _socket!.listen(
           _onMessage,
-          onError: (_) => _updateStatus(ConnectionStatus.disconnected),
-          onDone: () => _updateStatus(ConnectionStatus.disconnected),
+          onError: (e) {
+            debugPrint('[TV] Stream hatası: $e');
+            _updateStatus(ConnectionStatus.disconnected);
+          },
+          onDone: () {
+            debugPrint('[TV] Bağlantı kapandı');
+            _updateStatus(ConnectionStatus.disconnected);
+          },
           cancelOnError: true,
         );
 
         _socket!.add(jsonEncode(buildConnectMessage('Samsung Kumanda')));
+        debugPrint('[TV] Auth mesajı gönderildi');
         return;
-      } catch (_) {
+      } catch (e) {
+        debugPrint('[TV] Hata (${urlList[i]}): $e');
         _socket?.close();
         _socket = null;
       }
     }
 
+    debugPrint('[TV] Her iki port da başarısız');
     _updateStatus(ConnectionStatus.disconnected);
   }
 
   void _onMessage(dynamic data) {
+    debugPrint('[TV] Mesaj alındı: $data');
     try {
       final json = jsonDecode(data as String) as Map<String, dynamic>;
       final event = json['event'] as String?;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import '../providers/tv_provider.dart';
 import '../services/tv_connection_service.dart';
@@ -25,7 +26,10 @@ class _RemoteScreenState extends State<RemoteScreen> {
     super.didChangeDependencies();
     final status = context.watch<TVProvider>().status;
     if (_lastStatus != null && _lastStatus != status) {
-      _showStatusSnackBar(status);
+      final s = status;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showStatusSnackBar(s);
+      });
     }
     _lastStatus = status;
   }
@@ -33,44 +37,32 @@ class _RemoteScreenState extends State<RemoteScreen> {
   void _showStatusSnackBar(ConnectionStatus status) {
     String msg;
     Color color;
-    IconData icon;
 
     switch (status) {
       case ConnectionStatus.connecting:
         msg = 'Bağlanıyor...';
         color = Colors.orange.shade700;
-        icon = Icons.wifi_find;
       case ConnectionStatus.connected:
         final name = context.read<TVProvider>().currentDevice?.name ?? 'TV';
         msg = '$name bağlandı ✓';
         color = Colors.green.shade700;
-        icon = Icons.wifi;
       case ConnectionStatus.disconnected:
         msg = 'Bağlantı kesildi';
         color = Colors.red.shade700;
-        icon = Icons.wifi_off;
     }
 
     ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(icon, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Text(msg, style: const TextStyle(color: Colors.white)),
-          ],
-        ),
-        backgroundColor: color,
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(12),
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: const TextStyle(color: Colors.white)),
+      backgroundColor: color,
+      duration: const Duration(seconds: 3),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      margin: const EdgeInsets.all(12),
+    ));
   }
 
-  void _showDiscovery(BuildContext context) {
+  void _showDiscovery() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -81,21 +73,15 @@ class _RemoteScreenState extends State<RemoteScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).padding.bottom;
     return Scaffold(
       backgroundColor: const Color(0xFF0D1B2A),
-      extendBody: true,
       body: SafeArea(
-        bottom: false,
         child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            12,
-            16,
-            MediaQuery.of(context).padding.bottom + 16,
-          ),
+          padding: EdgeInsets.fromLTRB(16, 12, 16, bottomPad + 16),
           child: Column(
             children: [
-              RemoteTopBar(onSettingsTap: () => _showDiscovery(context)),
+              RemoteTopBar(onSettingsTap: _showDiscovery),
               const SizedBox(height: 14),
               const RemoteFunctionRows(),
               const SizedBox(height: 14),
@@ -106,7 +92,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
               const RemoteStreamingRow(),
               const SizedBox(height: 10),
               const RemoteBottomRow(),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
             ],
           ),
         ),
