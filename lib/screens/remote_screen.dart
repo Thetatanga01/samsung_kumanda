@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/tv_provider.dart';
 import '../services/tv_connection_service.dart';
@@ -10,6 +12,7 @@ import '../widgets/remote_nav_row.dart';
 import '../widgets/remote_streaming_row.dart';
 import '../widgets/remote_bottom_row.dart';
 import '../widgets/device_discovery_sheet.dart';
+import '../widgets/tv_setup_guide_sheet.dart';
 
 class RemoteScreen extends StatefulWidget {
   const RemoteScreen({super.key});
@@ -19,7 +22,24 @@ class RemoteScreen extends StatefulWidget {
 }
 
 class _RemoteScreenState extends State<RemoteScreen> {
+  static const _volumeChannel =
+      EventChannel('com.mustafaguven.samsung_kumanda/volume_keys');
+  StreamSubscription? _volumeSub;
   ConnectionStatus? _lastStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    _volumeSub = _volumeChannel.receiveBroadcastStream().listen((key) {
+      if (mounted) context.read<TVProvider>().sendKey(key as String);
+    });
+  }
+
+  @override
+  void dispose() {
+    _volumeSub?.cancel();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -46,9 +66,17 @@ class _RemoteScreenState extends State<RemoteScreen> {
         final name = context.read<TVProvider>().currentDevice?.name ?? 'TV';
         msg = '$name bağlandı ✓';
         color = Colors.green.shade700;
+      case ConnectionStatus.waitingForApproval:
+        msg = 'TV ekranında "İzin Ver"e basın';
+        color = Colors.blue.shade700;
       case ConnectionStatus.disconnected:
         msg = 'Bağlantı kesildi';
         color = Colors.red.shade700;
+      case ConnectionStatus.setupRequired:
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (mounted) TVSetupGuideSheet.show(context);
+        });
+        return;
     }
 
     ScaffoldMessenger.of(context).clearSnackBars();

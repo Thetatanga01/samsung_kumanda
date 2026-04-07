@@ -41,8 +41,15 @@ class TVProvider extends ChangeNotifier {
     if (json != null) {
       try {
         final device = TVDevice.fromJson(jsonDecode(json) as Map<String, dynamic>);
-        await connectTo(device);
-      } catch (_) {}
+        // Bozuk IP kontrolü — en az 3 nokta olmalı (örn: 192.168.0.48)
+        if (device.ip.split('.').length == 4) {
+          await connectTo(device);
+        } else {
+          await prefs.remove('last_tv');
+        }
+      } catch (_) {
+        await prefs.remove('last_tv');
+      }
     }
   }
 
@@ -58,6 +65,13 @@ class TVProvider extends ChangeNotifier {
   }
 
   void sendKey(String keyCode) => _connectionService.sendKey(keyCode);
+  Future<void> launchApp(String appId) => _connectionService.launchApp(appId);
+
+  Future<void> retryConnection() async {
+    if (_currentDevice != null) {
+      await connectTo(_currentDevice!);
+    }
+  }
 
   Future<void> scanForDevices() async {
     _isScanning = true;

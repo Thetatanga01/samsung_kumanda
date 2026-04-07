@@ -15,7 +15,7 @@ class RemoteStreamingRow extends StatelessWidget {
           child: RemoteButton(
             height: 60,
             borderRadius: BorderRadius.circular(16),
-            onTap: () => provider.sendKey('KEY_PRIMEAPP'),
+            onTap: () => provider.launchApp('prime'),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: const [
@@ -46,7 +46,7 @@ class RemoteStreamingRow extends StatelessWidget {
           child: RemoteButton(
             height: 60,
             borderRadius: BorderRadius.circular(16),
-            onTap: () => provider.sendKey('KEY_NETFLIX'),
+            onTap: () => provider.launchApp('netflix'),
             child: const Text(
               'NETFLIX',
               style: TextStyle(
@@ -63,7 +63,7 @@ class RemoteStreamingRow extends StatelessWidget {
           child: RemoteButton(
             height: 60,
             borderRadius: BorderRadius.circular(16),
-            onTap: () => provider.sendKey('KEY_YOUTUBE'),
+            onTap: () => provider.launchApp('youtube'),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: const [
