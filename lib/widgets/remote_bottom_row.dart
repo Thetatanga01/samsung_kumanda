@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/tv_provider.dart';
+import 'remote_button.dart';
 
 class RemoteBottomRow extends StatelessWidget {
   const RemoteBottomRow({super.key});
@@ -10,37 +11,33 @@ class RemoteBottomRow extends StatelessWidget {
     final provider = context.read<TVProvider>();
     return Row(
       children: [
-        _bottomButton(
-          onTap: () => provider.sendKey('KEY_APPS'),
-          child: const _AppsGridIcon(),
+        Expanded(
+          child: RemoteButton(
+            height: 58,
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => provider.sendKey('KEY_APPS'),
+            child: const _AppsGridIcon(),
+          ),
         ),
         const SizedBox(width: 8),
-        _bottomButton(
-          onTap: () => provider.sendKey('KEY_SCREEN_MIRRORING'),
-          child: const Icon(Icons.cast, color: Colors.white70, size: 24),
+        Expanded(
+          child: RemoteButton(
+            height: 58,
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => provider.sendKey('KEY_SCREEN_MIRRORING'),
+            child: const Icon(Icons.cast, color: Colors.white70, size: 24),
+          ),
         ),
         const SizedBox(width: 8),
-        _bottomButton(
-          onTap: () => provider.sendKey('KEY_MIC'),
-          child: const Icon(Icons.keyboard_alt_outlined, color: Colors.white70, size: 24),
+        Expanded(
+          child: RemoteButton(
+            height: 58,
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => provider.sendKey('KEY_MIC'),
+            child: const Icon(Icons.keyboard_alt_outlined, color: Colors.white70, size: 24),
+          ),
         ),
       ],
-    );
-  }
-
-  Widget _bottomButton({required Widget child, required VoidCallback onTap}) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          height: 58,
-          decoration: BoxDecoration(
-            color: const Color(0xFF162033),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Center(child: child),
-        ),
-      ),
     );
   }
 }

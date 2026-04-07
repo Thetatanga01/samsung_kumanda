@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/tv_provider.dart';
+import 'remote_button.dart';
 
 class RemoteNavRow extends StatelessWidget {
   const RemoteNavRow({super.key});
@@ -10,28 +11,33 @@ class RemoteNavRow extends StatelessWidget {
     final provider = context.read<TVProvider>();
     return Row(
       children: [
-        _navButton(icon: Icons.arrow_back_rounded, onTap: () => provider.sendKey('KEY_RETURN')),
-        const SizedBox(width: 8),
-        _navButton(icon: Icons.home_rounded, onTap: () => provider.sendKey('KEY_HOME')),
-        const SizedBox(width: 8),
-        _navButton(icon: Icons.input_rounded, onTap: () => provider.sendKey('KEY_SOURCE')),
-      ],
-    );
-  }
-
-  Widget _navButton({required IconData icon, required VoidCallback onTap}) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          height: 58,
-          decoration: BoxDecoration(
-            color: const Color(0xFF162033),
+        Expanded(
+          child: RemoteButton(
+            height: 58,
             borderRadius: BorderRadius.circular(16),
+            onTap: () => provider.sendKey('KEY_RETURN'),
+            child: const Icon(Icons.arrow_back_rounded, color: Colors.white70, size: 26),
           ),
-          child: Icon(icon, color: Colors.white70, size: 26),
         ),
-      ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: RemoteButton(
+            height: 58,
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => provider.sendKey('KEY_HOME'),
+            child: const Icon(Icons.home_rounded, color: Colors.white70, size: 26),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: RemoteButton(
+            height: 58,
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => provider.sendKey('KEY_SOURCE'),
+            child: const Icon(Icons.input_rounded, color: Colors.white70, size: 26),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -22,12 +22,16 @@ class TVConnectionService {
   TVConnectionService({this.onStatusChange, this.onTokenReceived});
 
   Future<void> connect(TVDevice tv) async {
+    disconnect(); // önce mevcut bağlantıyı kapat
     _updateStatus(ConnectionStatus.connecting);
     try {
       _channel = IOWebSocketChannel.connect(
         Uri.parse(tv.wsUrl),
         connectTimeout: const Duration(seconds: 5),
       );
+
+      // ready future bağlantı kurulana kadar bekler, hata olursa exception fırlatır
+      await _channel!.ready;
 
       _channel!.sink.add(jsonEncode(buildConnectMessage('Samsung Kumanda')));
 
