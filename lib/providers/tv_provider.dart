@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/tv_device.dart';
 import '../services/tv_connection_service.dart';
 import '../services/tv_discovery_service.dart';
+export '../services/tv_connection_service.dart' show ConnectionStatus;
 
 class TVProvider extends ChangeNotifier {
   late final TVConnectionService _connectionService;
@@ -31,6 +32,15 @@ class TVProvider extends ChangeNotifier {
           await _saveDevice(_currentDevice!);
         }
       },
+      onDeviceNameResolved: (ip) async {
+        // Bağlantı kurulduktan sonra gerçek model adını çek
+        final updated = await TVDiscoveryService.fetchDeviceInfo(ip);
+        if (updated != null && _currentDevice != null) {
+          _currentDevice = _currentDevice!.copyWith(name: updated.name);
+          await _saveDevice(_currentDevice!);
+          notifyListeners();
+        }
+      },
     );
     _loadAndConnect();
   }
@@ -41,7 +51,6 @@ class TVProvider extends ChangeNotifier {
     if (json != null) {
       try {
         final device = TVDevice.fromJson(jsonDecode(json) as Map<String, dynamic>);
-        // Bozuk IP kontrolü — en az 3 nokta olmalı (örn: 192.168.0.48)
         if (device.ip.split('.').length == 4) {
           await connectTo(device);
         } else {
@@ -77,7 +86,6 @@ class TVProvider extends ChangeNotifier {
     _isScanning = true;
     _discoveredDevices = [];
     notifyListeners();
-
     _discoveredDevices = await _discoveryService.discover();
     _isScanning = false;
     notifyListeners();

@@ -11,6 +11,7 @@ import '../widgets/remote_dpad.dart';
 import '../widgets/remote_nav_row.dart';
 import '../widgets/remote_streaming_row.dart';
 import '../widgets/remote_bottom_row.dart';
+import '../widgets/remote_simple_view.dart';
 import '../widgets/device_discovery_sheet.dart';
 import '../widgets/tv_setup_guide_sheet.dart';
 
@@ -27,6 +28,9 @@ class _RemoteScreenState extends State<RemoteScreen> {
   StreamSubscription? _volumeSub;
   ConnectionStatus? _lastStatus;
 
+  final _pageController = PageController();
+  int _currentPage = 0;
+
   @override
   void initState() {
     super.initState();
@@ -38,6 +42,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
   @override
   void dispose() {
     _volumeSub?.cancel();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -102,26 +107,125 @@ class _RemoteScreenState extends State<RemoteScreen> {
   @override
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0D1B2A),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, bottomPad + 16),
-          child: Column(
-            children: [
-              RemoteTopBar(onSettingsTap: _showDiscovery),
-              const SizedBox(height: 14),
-              const RemoteFunctionRows(),
-              const SizedBox(height: 14),
-              const RemoteDPad(),
-              const SizedBox(height: 14),
-              const RemoteNavRow(),
-              const SizedBox(height: 14),
-              const RemoteStreamingRow(),
-              const SizedBox(height: 10),
-              const RemoteBottomRow(),
-              const SizedBox(height: 8),
-            ],
+        child: Column(
+          children: [
+            // ── Top bar ─────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: RemoteTopBar(onSettingsTap: _showDiscovery),
+            ),
+
+            const SizedBox(height: 10),
+
+            // ── Mod göstergesi ───────────────────────────────────
+            _ModeIndicator(
+              currentPage: _currentPage,
+              onTap: (i) {
+                _pageController.animateToPage(
+                  i,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              },
+            ),
+
+            const SizedBox(height: 10),
+
+            // ── Sayfalar ─────────────────────────────────────────
+            Expanded(
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: (i) => setState(() => _currentPage = i),
+                children: [
+                  // Sayfa 0: Tam kumanda
+                  SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPad + 16),
+                    child: const Column(
+                      children: [
+                        RemoteFunctionRows(),
+                        SizedBox(height: 14),
+                        RemoteDPad(),
+                        SizedBox(height: 14),
+                        RemoteNavRow(),
+                        SizedBox(height: 14),
+                        RemoteStreamingRow(),
+                        SizedBox(height: 10),
+                        RemoteBottomRow(),
+                        SizedBox(height: 8),
+                      ],
+                    ),
+                  ),
+
+                  // Sayfa 1: Basit mod
+                  Padding(
+                    padding: EdgeInsets.only(bottom: bottomPad),
+                    child: const RemoteSimpleView(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Mod seçici pill ──────────────────────────────────────────────────────────
+class _ModeIndicator extends StatelessWidget {
+  final int currentPage;
+  final void Function(int) onTap;
+  const _ModeIndicator({required this.currentPage, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      height: 36,
+      decoration: BoxDecoration(
+        color: const Color(0xFF162033),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          _Tab(label: 'Tam Kumanda', active: currentPage == 0, onTap: () => onTap(0)),
+          _Tab(label: 'Kolay Mod', active: currentPage == 1, onTap: () => onTap(1)),
+        ],
+      ),
+    );
+  }
+}
+
+class _Tab extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _Tab({required this.label, required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFF1565C0) : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: active ? Colors.white : Colors.white38,
+              fontSize: 13,
+              fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+            ),
           ),
         ),
       ),

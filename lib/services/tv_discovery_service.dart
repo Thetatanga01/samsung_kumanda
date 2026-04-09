@@ -23,68 +23,75 @@ class TVDiscoveryService {
   /// [fallback] true ise varsayılan isimle cihaz döner.
   static Future<TVDevice?> fetchDeviceInfo(String ip,
       {bool fallback = false}) async {
-    try {
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 2);
-      final request =
-          await client.getUrl(Uri.parse('http://$ip:8001/api/v2'));
-      final response =
-          await request.close().timeout(const Duration(seconds: 2));
-      final body = await response.transform(utf8.decoder).join();
-      client.close();
+    // Port 8001 (HTTP) ve 8002 (HTTPS) sırayla dene
+    for (final uri in [
+      Uri.parse('http://$ip:8001/api/v2/'),
+      Uri.parse('https://$ip:8002/api/v2/'),
+    ]) {
+      try {
+        final client = HttpClient()
+          ..connectionTimeout = const Duration(seconds: 2)
+          ..badCertificateCallback = (cert, host, port) => true;
+        final request = await client.getUrl(uri);
+        final response =
+            await request.close().timeout(const Duration(seconds: 2));
+        final body = await response.transform(utf8.decoder).join();
+        client.close();
 
-      final json = jsonDecode(body) as Map<String, dynamic>;
-      final device = json['device'] as Map<String, dynamic>?;
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        final device = json['device'] as Map<String, dynamic>?;
 
-      final name = (device?['name'] as String?)?.isNotEmpty == true
-          ? device!['name'] as String
-          : null;
-      final model = device?['modelName'] as String?;
+        // "[TV] Samsung Q60 Series (65)" gibi prefix'i temizle
+        final rawName = (device?['name'] as String? ?? '').replaceFirst(RegExp(r'^\[TV\]\s*'), '').trim();
+        final name = rawName.isNotEmpty ? rawName : null;
+        final model = device?['modelName'] as String?;
 
-      String displayName;
-      if (name != null && model != null) {
-        displayName = '$name ($model)';
-      } else if (model != null) {
-        displayName = 'Samsung $model';
-      } else if (name != null) {
-        displayName = name;
-      } else {
-        displayName = 'Samsung TV ($ip)';
-      }
-
-      return TVDevice(ip: ip, name: displayName, token: '');
-    } catch (_) {
-      // HTTP yanıt vermedi — port açık ama HTTP API yok (yeni firmware)
-      if (fallback) return TVDevice(ip: ip, name: 'Samsung TV ($ip)', token: '');
-      return null;
-    }
-  }
-
-  /// SSDP ve subnet scan'ı paralel çalıştırır, yalnızca port 8001 açık
-  /// (gerçekten erişilebilir TV) cihazları döner.
-  Future<List<TVDevice>> discover(
-      {Duration timeout = const Duration(seconds: 8)}) async {
-    final results = await Future.wait([
-      _discoverViaSsdp(timeout: timeout),
-      _scanSubnet(timeout: timeout),
-    ]);
-
-    // Sonuçları birleştir, IP'ye göre tekilleştir
-    final seen = <String>{};
-    final combined = <TVDevice>[];
-    for (final list in results) {
-      for (final device in list) {
-        if (seen.add(device.ip)) {
-          combined.add(device);
+        String displayName;
+        if (name != null) {
+          displayName = name;
+        } else if (model != null) {
+          displayName = 'Samsung $model';
+        } else {
+          displayName = 'Samsung TV ($ip)';
         }
+
+        return TVDevice(ip: ip, name: displayName, token: '');
+      } catch (_) {
+        continue;
       }
     }
-    debugPrint('[Discovery] Bulunan TV: ${combined.map((d) => d.ip).toList()}');
-    return combined;
+
+    if (fallback) return TVDevice(ip: ip, name: 'Samsung TV ($ip)', token: '');
+    return null;
   }
 
-  Future<List<TVDevice>> _discoverViaSsdp(
-      {Duration timeout = const Duration(seconds: 5)}) async {
+  /// SSDP önce denir, 2 saniye içinde TV bulursa hemen döner.
+  /// Bulamazsa subnet scan ile devam eder.
+  Future<List<TVDevice>> discover() async {
+    // 1) SSDP — ilk TV bulunduğunda veya 2sn geçince tamamlanır
+    final ssdpDevices = await _discoverViaSsdp(
+      timeout: const Duration(seconds: 2),
+      stopOnFirst: true,
+    );
+    if (ssdpDevices.isNotEmpty) {
+      debugPrint('[Discovery] SSDP hızlı sonuç: ${ssdpDevices.map((d) => d.ip).toList()}');
+      return ssdpDevices;
+    }
+
+    // 2) SSDP boş döndü — subnet scan
+    debugPrint('[Discovery] SSDP sonuç yok, subnet scan başlıyor...');
+    final subnetDevices = await _scanSubnet();
+
+    final seen = <String>{};
+    return [...ssdpDevices, ...subnetDevices]
+        .where((d) => seen.add(d.ip))
+        .toList();
+  }
+
+  Future<List<TVDevice>> _discoverViaSsdp({
+    Duration timeout = const Duration(seconds: 2),
+    bool stopOnFirst = false,
+  }) async {
     final foundIps = <String>{};
     RawDatagramSocket? socket;
 
@@ -97,9 +104,6 @@ class TVDiscoveryService {
       socket.broadcastEnabled = true;
       socket.multicastHops = 10;
 
-      final message = utf8.encode(_ssdpMessage);
-      socket.send(message, InternetAddress(_ssdpAddress), _ssdpPort);
-
       final completer = Completer<void>();
       final timer = Timer(timeout, () {
         if (!completer.isCompleted) completer.complete();
@@ -111,15 +115,20 @@ class TVDiscoveryService {
           if (datagram == null) return;
           final response = utf8.decode(datagram.data, allowMalformed: true);
           final ip = datagram.address.address;
-          // Sadece Samsung TV SSDP yanıtlarını kabul et
           if (!foundIps.contains(ip) &&
               (response.contains('RemoteControlReceiver') ||
                   response.contains('samsung.remote'))) {
             debugPrint('[Discovery] SSDP TV yanıtı: $ip');
             foundIps.add(ip);
+            // İlk TV bulundu — hemen tamamla
+            if (stopOnFirst && !completer.isCompleted) completer.complete();
           }
         }
       });
+
+      // SSDP isteği gönder
+      socket.send(utf8.encode(_ssdpMessage),
+          InternetAddress(_ssdpAddress), _ssdpPort);
 
       await completer.future;
       timer.cancel();
@@ -134,23 +143,20 @@ class TVDiscoveryService {
       }
     }
 
-    // Port 8001 TCP erişimi doğrulayarak sahte cihazları filtrele
+    // Port erişimini paralel doğrula
     final verified = <String>[];
     await Future.wait(
-        foundIps.map((ip) => _checkPort(ip, verified, port: 8001)));
-    // Port 8001 kapalıysa port 8002 dene
+        foundIps.map((ip) => _checkPort(ip, verified, port: 8002)));
     final remaining = foundIps.difference(verified.toSet());
     await Future.wait(
-        remaining.map((ip) => _checkPort(ip, verified, port: 8002)));
+        remaining.map((ip) => _checkPort(ip, verified, port: 8001)));
 
-    final futures =
-        verified.map((ip) => fetchDeviceInfo(ip, fallback: true));
-    final devices = await Future.wait(futures);
+    final devices = await Future.wait(
+        verified.map((ip) => fetchDeviceInfo(ip, fallback: true)));
     return devices.whereType<TVDevice>().toList();
   }
 
-  Future<List<TVDevice>> _scanSubnet(
-      {Duration timeout = const Duration(seconds: 12)}) async {
+  Future<List<TVDevice>> _scanSubnet() async {
     final localIp = await _getLocalIp();
     if (localIp == null) return [];
 
@@ -161,8 +167,8 @@ class TVDiscoveryService {
 
     final foundIps = <String>[];
 
-    // 254 paralel bağlantı Android'de kısıtlanıyor — 20'li batch'ler kullan
-    const batchSize = 20;
+    // 50'li batch — kısa timeout ile Android'de sorunsuz çalışır
+    const batchSize = 50;
     for (int start = 1; start <= 254; start += batchSize) {
       final end = (start + batchSize - 1).clamp(1, 254);
       final batch = <Future<void>>[];
@@ -171,8 +177,10 @@ class TVDiscoveryService {
         batch.add(_checkPorts(ip, foundIps));
       }
       await Future.wait(batch);
+      // TV bulunduğunda diğer batch'leri bekleme
       if (foundIps.isNotEmpty) {
-        debugPrint('[Discovery] Bulunan: $foundIps');
+        debugPrint('[Discovery] Subnet bulunan: $foundIps — tarama durduruluyor');
+        break;
       }
     }
 
@@ -184,15 +192,12 @@ class TVDiscoveryService {
     return devices.whereType<TVDevice>().toList();
   }
 
-  /// Hem port 8001 hem 8002 kontrol eder.
+  /// Hem port 8002 hem 8001 kontrol eder.
   Future<void> _checkPorts(String ip, List<String> found) async {
-    for (final port in [8001, 8002]) {
+    for (final port in [8002, 8001]) {
       try {
-        final socket = await Socket.connect(
-          ip,
-          port,
-          timeout: const Duration(milliseconds: 800),
-        );
+        final socket = await Socket.connect(ip, port,
+            timeout: const Duration(milliseconds: 350));
         socket.destroy();
         if (!found.contains(ip)) {
           debugPrint('[Discovery] Port $port açık: $ip');
@@ -207,7 +212,7 @@ class TVDiscoveryService {
       {required int port}) async {
     try {
       final socket = await Socket.connect(ip, port,
-          timeout: const Duration(milliseconds: 800));
+          timeout: const Duration(milliseconds: 350));
       socket.destroy();
       if (!found.contains(ip)) found.add(ip);
     } catch (_) {}

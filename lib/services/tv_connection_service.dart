@@ -26,32 +26,21 @@ class TVConnectionService {
 
   final void Function(ConnectionStatus)? onStatusChange;
   final void Function(String)? onTokenReceived;
+  final void Function(String ip)? onDeviceNameResolved;
 
-  TVConnectionService({this.onStatusChange, this.onTokenReceived});
+  TVConnectionService({this.onStatusChange, this.onTokenReceived, this.onDeviceNameResolved});
 
   Future<void> connect(TVDevice tv) async {
     disconnect();
     _tvIp = tv.ip;
     _updateStatus(ConnectionStatus.connecting);
 
-    // Port 8002 (SSL) önce dene — yeni TV'lerde varsayılan açık
-    // Port 8001 (plain WS) fallback
     if (await _tryWebSocket(tv)) return;
-
-    // Legacy TCP protokolü dene (port 7676 — eski Samsung TV'ler)
     if (await _tryLegacyTcp(tv)) return;
 
-    // WoL dene ve WebSocket'i yeniden dene
-    debugPrint('[TV] WoL denenecek...');
-    final mac = await _getMacFromArp(tv.ip);
-    if (mac != null) {
-      await _sendWolPacket(tv.ip, mac);
-      await Future.delayed(const Duration(seconds: 6));
-      if (await _tryWebSocket(tv)) return;
-    }
-
+    // TV kapalı veya ulaşılamıyor — provider retry eder
     debugPrint('[TV] Tüm bağlantı girişimleri başarısız');
-    _updateStatus(ConnectionStatus.setupRequired);
+    _updateStatus(ConnectionStatus.disconnected);
   }
 
   /// Doğru URL formatıyla WebSocket bağlantısı kurar.
@@ -137,7 +126,8 @@ class TVConnectionService {
             debugPrint('[TV] Token alındı: $newToken');
           }
           _updateStatus(ConnectionStatus.connected);
-          _resolveAppIds(); // arka planda app ID'lerini çöz
+          _resolveAppIds();
+          if (_tvIp != null) onDeviceNameResolved?.call(_tvIp!); // model adını güncelle
 
         case 'ms.channel.waiting':
           // TV onay bildirimi gösteriyor — kullanıcı OK'lamalı

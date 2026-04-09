@@ -20,6 +20,6 @@ class TVDevice {
         'token': token,
       };
 
-  TVDevice copyWith({String? token}) =>
-      TVDevice(ip: ip, name: name, token: token ?? this.token);
+  TVDevice copyWith({String? name, String? token}) =>
+      TVDevice(ip: ip, name: name ?? this.name, token: token ?? this.token);
 }

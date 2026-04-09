@@ -27,34 +27,34 @@ class RemoteButton extends StatefulWidget {
 
 class _RemoteButtonState extends State<RemoteButton>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scale;
+  late AnimationController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 80),
-      reverseDuration: const Duration(milliseconds: 150),
-    );
-    _scale = Tween<double>(begin: 1.0, end: 0.91).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+      duration: const Duration(milliseconds: 70),
+      reverseDuration: const Duration(milliseconds: 130),
     );
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _ctrl.dispose();
     super.dispose();
   }
 
-  void _onTapDown(TapDownDetails _) => _controller.forward();
-  void _onTapUp(TapUpDetails _) => _controller.reverse();
-  void _onTapCancel() => _controller.reverse();
+  void _onTapDown(TapDownDetails _) => _ctrl.forward();
+  void _onTapUp(TapUpDetails _) => _ctrl.reverse();
+  void _onTapCancel() => _ctrl.reverse();
 
   @override
   Widget build(BuildContext context) {
+    final base = widget.color;
+    final light = Color.lerp(base, Colors.white, 0.18)!;
+    final dark = Color.lerp(base, Colors.black, 0.30)!;
+
     return GestureDetector(
       onTap: widget.onTap == null
           ? null
@@ -65,25 +65,48 @@ class _RemoteButtonState extends State<RemoteButton>
       onTapDown: _onTapDown,
       onTapUp: _onTapUp,
       onTapCancel: _onTapCancel,
-      child: ScaleTransition(
-        scale: _scale,
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) => Container(
-            width: widget.width,
-            height: widget.height,
-            padding: widget.padding,
-            decoration: BoxDecoration(
-              color: Color.lerp(
-                widget.color,
-                Colors.white,
-                _controller.value * 0.12,
-              )!,
-              borderRadius: widget.borderRadius,
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (context, child) {
+          final t = _ctrl.value; // 0 = normal, 1 = pressed
+
+          return Transform.translate(
+            // Basılınca 2px aşağı kayar
+            offset: Offset(0, t * 2),
+            child: Container(
+              width: widget.width,
+              height: widget.height,
+              padding: widget.padding,
+              decoration: BoxDecoration(
+                borderRadius: widget.borderRadius,
+                // Normal: üstten ışık, basılınca tersine döner
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: t < 0.5
+                      ? [light, base, dark]
+                      : [dark, base, light],
+                ),
+                boxShadow: [
+                  // Üst-sol: ışık yansıması (basılınca kaybolur)
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.06 * (1 - t)),
+                    offset: const Offset(-1, -1),
+                    blurRadius: 2,
+                  ),
+                  // Alt-sağ: gölge (basılınca küçülür)
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.40 * (1 - t * 0.7)),
+                    offset: Offset(0, 3 * (1 - t)),
+                    blurRadius: 6 * (1 - t * 0.6),
+                  ),
+                ],
+              ),
+              child: Center(child: child),
             ),
-            child: Center(child: widget.child),
-          ),
-        ),
+          );
+        },
+        child: widget.child,
       ),
     );
   }
