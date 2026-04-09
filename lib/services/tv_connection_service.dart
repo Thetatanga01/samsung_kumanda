@@ -130,7 +130,6 @@ class TVConnectionService {
           if (_tvIp != null) onDeviceNameResolved?.call(_tvIp!); // model adını güncelle
 
         case 'ms.channel.waiting':
-          // TV onay bildirimi gösteriyor — kullanıcı OK'lamalı
           debugPrint('[TV] TV onay bekliyor');
           _updateStatus(ConnectionStatus.waitingForApproval);
 

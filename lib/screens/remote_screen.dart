@@ -22,11 +22,13 @@ class RemoteScreen extends StatefulWidget {
   State<RemoteScreen> createState() => _RemoteScreenState();
 }
 
-class _RemoteScreenState extends State<RemoteScreen> {
+class _RemoteScreenState extends State<RemoteScreen>
+    with WidgetsBindingObserver {
   static const _volumeChannel =
       EventChannel('com.mustafaguven.samsung_kumanda/volume_keys');
   StreamSubscription? _volumeSub;
   ConnectionStatus? _lastStatus;
+  DateTime? _pausedAt;
 
   final _pageController = PageController();
   int _currentPage = 0;
@@ -34,6 +36,7 @@ class _RemoteScreenState extends State<RemoteScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _volumeSub = _volumeChannel.receiveBroadcastStream().listen((key) {
       if (mounted) context.read<TVProvider>().sendKey(key as String);
     });
@@ -41,9 +44,27 @@ class _RemoteScreenState extends State<RemoteScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _volumeSub?.cancel();
     _pageController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _pausedAt = DateTime.now();
+    } else if (state == AppLifecycleState.resumed && mounted) {
+      final provider = context.read<TVProvider>();
+      if (provider.status == ConnectionStatus.disconnected &&
+          provider.currentDevice != null) {
+        // Kısa arka plan geçişlerinde (bildirim açma vs.) bağlantıya dokunma
+        final inBackground = _pausedAt != null &&
+            DateTime.now().difference(_pausedAt!) > const Duration(seconds: 5);
+        if (inBackground) provider.retryConnection();
+      }
+      _pausedAt = null;
+    }
   }
 
   @override
